@@ -21,7 +21,6 @@ export async function GET(request: Request) {
       );
     }
 
-    // 1. إنشاء رابط البحث في موقع مجلس القضاء الأعلى
     const searchUrl =
       `${BASE_URL}/?activeTab=Discrimination` +
       `&basicno=${encodeURIComponent(basicno)}` +
@@ -29,7 +28,6 @@ export async function GET(request: Request) {
       `&basicyear=${encodeURIComponent(basicyear)}` +
       `&CourtNumber=${encodeURIComponent(courtNumber)}`;
 
-    // 2. طلب صفحة نتائج البحث
     const searchResponse = await fetch(searchUrl, {
       method: "GET",
       headers: {
@@ -44,6 +42,7 @@ export async function GET(request: Request) {
         {
           success: false,
           error: `تعذر الوصول إلى موقع مجلس القضاء الأعلى. HTTP ${searchResponse.status}`,
+          searchUrl,
         },
         { status: 502 }
       );
@@ -51,7 +50,6 @@ export async function GET(request: Request) {
 
     const searchHtml = await searchResponse.text();
 
-    // 3. استخراج رابط القرار من صفحة النتائج
     const caseMatch = searchHtml.match(
       /href=["'](\/Home\/Cases\/[^"']+)["']/i
     );
@@ -68,7 +66,6 @@ export async function GET(request: Request) {
     const casePath = caseMatch[1];
     const caseUrl = new URL(casePath, BASE_URL).toString();
 
-    // 4. فتح صفحة القرار نفسها
     const caseResponse = await fetch(caseUrl, {
       method: "GET",
       headers: {
@@ -84,6 +81,7 @@ export async function GET(request: Request) {
           success: false,
           error: `تم العثور على القرار، ولكن تعذر فتح صفحته. HTTP ${caseResponse.status}`,
           caseUrl,
+          searchUrl,
         },
         { status: 502 }
       );
@@ -91,31 +89,33 @@ export async function GET(request: Request) {
 
     const caseHtml = await caseResponse.text();
 
-    // 5. استخراج رابط ملف PDF
     const pdfMatch = caseHtml.match(
-      /(?:window\.open\(|href=["'])['"]?(\/pdf\/[^'" )]+\.pdf)/i
+      /\/pdf\/[^'" )]+\.pdf/i
     );
 
     if (!pdfMatch) {
       return NextResponse.json({
         success: true,
         found: true,
-        message: "تم العثور على صفحة القرار، ولكن لم يتم العثور على ملف PDF.",
+        pdfFound: false,
+        message:
+          "تم العثور على صفحة القرار، ولكن لم يتم العثور على ملف PDF.",
         caseUrl,
         searchUrl,
       });
     }
 
-    const pdfPath = pdfMatch[1];
+    const pdfPath = pdfMatch[0];
     const pdfUrl = new URL(pdfPath, BASE_URL).toString();
 
-    // 6. إعادة المعلومات إلى رفيق
     return NextResponse.json({
       success: true,
       found: true,
+      pdfFound: true,
       basicno,
       basicyear,
       dept,
+      courtNumber,
       searchUrl,
       caseUrl,
       pdfUrl,
